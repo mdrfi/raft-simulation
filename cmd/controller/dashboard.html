@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Raft Cluster Dashboard (HashiCorp)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px;display:flex;align-items:center;gap:16px}
+.header h1{font-size:20px;color:#58a6ff;font-weight:600}
+.header .badge{background:#238636;color:#fff;padding:2px 8px;border-radius:12px;font-size:12px}
+.container{max-width:1400px;margin:0 auto;padding:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;margin-bottom:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;transition:border-color .2s}
+.card:hover{border-color:#58a6ff}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.card-title{font-size:16px;font-weight:600}
+.state-badge{padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;text-transform:uppercase}
+.state-leader{background:#238636;color:#fff}
+.state-follower{background:#1f6feb;color:#fff}
+.state-candidate{background:#d29922;color:#000}
+.state-crashed{background:#da3633;color:#fff}
+.state-paused{background:#6e7681;color:#fff}
+.state-offline{background:#484f58;color:#c9d1d9}
+.state-leader-text{color:#3fb950}
+.state-follower-text{color:#58a6ff}
+.state-candidate-text{color:#d29922}
+.state-crashed-text{color:#f85149}
+.state-paused-text{color:#6e7681}
+.state-offline-text{color:#484f58}
+.card-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;font-size:13px}
+.stat-label{color:#8b949e}
+.stat-value{color:#f0f6fc;font-weight:600;font-variant-numeric:tabular-nums}
+.card-actions{display:flex;gap:6px;flex-wrap:wrap}
+.btn{padding:5px 12px;border-radius:6px;border:1px solid #30363d;background:#21262d;color:#c9d1d9;cursor:pointer;font-size:12px;transition:background .15s}
+.btn:hover{background:#30363d}
+.btn-danger{border-color:#da3633;color:#f85149}.btn-danger:hover{background:#da3633;color:#fff}
+.btn-warn{border-color:#d29922;color:#d29922}.btn-warn:hover{background:#d29922;color:#000}
+.btn-success{border-color:#238636;color:#3fb950}.btn-success:hover{background:#238636;color:#fff}
+.btn-primary{border-color:#1f6feb;color:#58a6ff}.btn-primary:hover{background:#1f6feb;color:#fff}
+.btn-lg{padding:8px 20px;font-size:14px}
+.actions-bar{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.actions-bar label{color:#8b949e;font-size:13px}
+.actions-bar input[type=text]{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:6px 12px;border-radius:6px;font-size:13px;width:220px}
+.actions-bar input[type=text]:focus{outline:none;border-color:#58a6ff}
+.log-panel{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:24px}
+.log-panel h3{margin-bottom:8px;font-size:14px;color:#8b949e}
+#eventLog{max-height:300px;overflow-y:auto;font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;line-height:1.6;white-space:pre-wrap;color:#8b949e}
+#eventLog .log-entry{padding:2px 0;border-bottom:1px solid #21262d}
+.log-time{color:#6e7681}.log-type{font-weight:600}
+.log-type-leader_elected{color:#ffd700}.log-type-election_start{color:#ff0}.log-type-vote_granted{color:#3fb950}
+.log-type-commit{color:#32cd32}.log-type-client_write{color:#f0f}.log-type-node_crashed{color:#f85149}
+.log-type-node_paused{color:#6e7681}.log-type-node_restarted{color:#58a6ff}.log-type-state_change{color:#0ff}
+.log-type-heartbeat_sent{color:#484f58}.log-type-append_sent{color:#1e90ff}.log-type-append_acked{color:#00ff7f}
+.log-type-vote_request{color:#f90}.log-type-node_resumed{color:#79c0ff}
+.toast{position:fixed;bottom:20px;right:20px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 20px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+.toast.ok{border-color:#238636;color:#3fb950}
+.toast.err{border-color:#da3633;color:#f85149}
+.timeline-link{display:inline-block;margin-top:8px;color:#58a6ff;text-decoration:none;font-size:13px}
+.timeline-link:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>&#9784; Raft Cluster Dashboard (HashiCorp)</h1>
+  <span class="badge" id="clusterStatus">loading...</span>
+</div>
+<div class="container">
+
+  <div class="actions-bar">
+    <button class="btn btn-primary btn-lg" onclick="writeToLeader()">&#9999; Write to Leader</button>
+    <label>Data: <input type="text" id="writeData" placeholder="my-value-123"></label>
+    <label>Pause ms: <input type="text" id="pauseMs" value="3000" style="width:80px"></label>
+    <div style="flex:1"></div>
+    <button class="btn btn-success btn-lg" onclick="collectTimeline()">&#128202; Collect Timeline</button>
+    <a href="/data/timeline.html" target="_blank" class="btn btn-lg" id="timelineLink" style="display:none">&#128064; View Timeline</a>
+  </div>
+
+  <div class="grid" id="nodeGrid"></div>
+
+  <div class="log-panel">
+    <h3>Live Event Stream <button class="btn" onclick="toggleStream()" id="streamBtn">&#9654; Start Streaming</button>
+       <button class="btn" onclick="clearLog()">Clear</button>
+       <label style="margin-left:12px;font-size:12px"><input type="checkbox" id="hideHeartbeats" checked> Hide heartbeats</label>
+    </h3>
+    <div id="eventLog"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const POLL_INTERVAL = 1000;
+const STREAM_INTERVAL = 1500;
+let streaming = false;
+let streamTimer = null;
+let lastEventCounts = {};
+
+function $(id){ return document.getElementById(id) }
+
+function toast(msg, ok){
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (ok ? 'ok' : 'err');
+  setTimeout(()=> t.className = 'toast', 2500);
+}
+
+async function api(path){
+  try {
+    const r = await fetch(path);
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function apiPost(path){
+  try {
+    const r = await fetch(path, {method:'POST'});
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function refreshStatus(){
+  const statuses = await api('/api/status');
+  if(!statuses) return;
+  const grid = $('nodeGrid');
+  let html = '';
+  let leaderCount = 0;
+  let healthyCount = 0;
+
+  for(const s of statuses){
+    let stateClass = 'state-offline';
+    let stateLabel = 'offline';
+    if(s.healthy || s.state){
+      if(s.crashed){ stateClass='state-crashed'; stateLabel='crashed'; }
+      else if(s.paused){ stateClass='state-paused'; stateLabel='paused'; }
+      else {
+        stateLabel = (s.state || 'unknown').toLowerCase();
+        stateClass = 'state-' + stateLabel;
+        healthyCount++;
+        if(stateLabel==='leader') leaderCount++;
+      }
+    }
+    html += '<div class="card">' +
+      '<div class="card-header">' +
+        '<span class="card-title ' + stateClass + '-text">Node ' + s.id + '</span>' +
+        '<span class="state-badge ' + stateClass + '">' + stateLabel + '</span>' +
+      '</div>' +
+      '<div class="card-stats">' +
+        '<span class="stat-label">Term</span><span class="stat-value">' + (s.term||0) + '</span>' +
+        '<span class="stat-label">Commit</span><span class="stat-value">' + (s.commit_index||0) + '</span>' +
+        '<span class="stat-label">Log Len</span><span class="stat-value">' + (s.log_length||0) + '</span>' +
+        '<span class="stat-label">Healthy</span><span class="stat-value">' + (s.healthy?'&#10003;':'&#10007;') + '</span>' +
+      '</div>' +
+      '<div class="card-actions">' +
+        '<button class="btn btn-danger" onclick="crashNode('+s.id+')">Crash</button>' +
+        '<button class="btn btn-warn" onclick="pauseNode('+s.id+')">Pause</button>' +
+        '<button class="btn btn-success" onclick="restartNode('+s.id+')">Restart</button>' +
+        '<button class="btn btn-primary" onclick="writeToNode('+s.id+')">Write</button>' +
+      '</div>' +
+    '</div>';
+  }
+  grid.innerHTML = html;
+
+  const badge = $('clusterStatus');
+  if(leaderCount === 1){
+    badge.textContent = healthyCount + '/5 healthy \u2022 1 leader';
+    badge.style.background = '#238636';
+  } else if(leaderCount === 0){
+    badge.textContent = healthyCount + '/5 healthy \u2022 no leader';
+    badge.style.background = '#d29922';
+  } else {
+    badge.textContent = healthyCount + '/5 healthy \u2022 ' + leaderCount + ' leaders!';
+    badge.style.background = '#da3633';
+  }
+}
+
+async function crashNode(id){
+  const r = await apiPost('/api/crash?id='+id);
+  toast('Node '+id+' crashed', r && r.ok);
+  refreshStatus();
+}
+async function pauseNode(id){
+  const ms = $('pauseMs').value || '3000';
+  const r = await apiPost('/api/pause?id='+id+'&ms='+ms);
+  toast('Node '+id+' paused for '+ms+'ms', r && r.ok);
+  refreshStatus();
+}
+async function restartNode(id){
+  const r = await apiPost('/api/restart?id='+id);
+  toast('Node '+id+' restarted', r && r.ok);
+  refreshStatus();
+}
+async function writeToNode(id){
+  const data = $('writeData').value || 'manual-write-' + Date.now();
+  const r = await api('/api/write?id='+id+'&data='+encodeURIComponent(data));
+  toast(r && r.ok ? 'Write OK (node '+id+')' : 'Write failed: '+(r?r.error:'network'), r && r.ok);
+  refreshStatus();
+}
+async function writeToLeader(){
+  const data = $('writeData').value || 'manual-write-' + Date.now();
+  const r = await api('/api/write?data='+encodeURIComponent(data));
+  toast(r && r.ok ? 'Write committed to leader' : 'Write failed: '+(r?r.error:'no leader'), r && r.ok);
+  refreshStatus();
+}
+async function collectTimeline(){
+  toast('Collecting events...', true);
+  const r = await api('/api/collect');
+  if(r && r.ok){
+    toast('Timeline ready! '+r.total_events+' events, '+r.total_commits+' commits, safety='+(r.safety_ok?'OK':'VIOLATION'), r.safety_ok);
+    $('timelineLink').style.display = 'inline-block';
+  } else {
+    toast('Collection failed', false);
+  }
+}
+
+function toggleStream(){
+  streaming = !streaming;
+  $('streamBtn').innerHTML = streaming ? '&#9724; Stop Streaming' : '&#9654; Start Streaming';
+  if(streaming){
+    lastEventCounts = {};
+    streamTick();
+    streamTimer = setInterval(streamTick, STREAM_INTERVAL);
+  } else {
+    clearInterval(streamTimer);
+  }
+}
+
+async function streamTick(){
+  const hideHB = $('hideHeartbeats').checked;
+  for(let i=0; i<5; i++){
+    const events = await api('/api/node-events?id='+i);
+    if(!events) continue;
+    const prev = lastEventCounts[i] || 0;
+    lastEventCounts[i] = events.length;
+    if(events.length <= prev) continue;
+    const newEvents = events.slice(prev);
+    const logEl = $('eventLog');
+    for(const e of newEvents){
+      if(hideHB && (e.type==='heartbeat_sent')) continue;
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      const t = String(e.sim_time_ms).padStart(8);
+      const toStr = e.to >= 0 ? ' \u2192 node-'+e.to : '';
+      div.innerHTML = '<span class="log-time">['+t+'ms]</span> ' +
+        '<span class="log-type log-type-'+e.type+'">'+e.type+'</span> ' +
+        'node-'+e.from + toStr + ' <span style="color:#6e7681">term='+e.term+
+        (e.entry_index ? ' idx='+e.entry_index : '') +
+        (e.node_state ? ' state='+e.node_state : '') +
+        (e.extra && e.extra.data ? ' data="'+e.extra.data+'"' : '') +
+        '</span>';
+      logEl.appendChild(div);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+
+function clearLog(){
+  $('eventLog').innerHTML = '';
+  lastEventCounts = {};
+}
+
+refreshStatus();
+setInterval(refreshStatus, POLL_INTERVAL);
+</script>
+</body>
+</html>
