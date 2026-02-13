@@ -1,0 +1,137 @@
+x-peers: &peers "0=node-0:8080,1=node-1:8080,2=node-2:8080,3=node-3:8080,4=node-4:8080"
+
+services:
+  node-0:
+    build:
+      context: .
+      target: node
+    container_name: hc-raft-node-0
+    environment:
+      NODE_ID: "0"
+      PEERS: *peers
+      DATA_DIR: /data
+      PORT: "8080"
+      RAFT_PORT: "7000"
+    volumes:
+      - raft-data-0:/data
+    ports:
+      - "8080:8080"
+    networks:
+      - raft-net
+    restart: unless-stopped
+
+  node-1:
+    build:
+      context: .
+      target: node
+    container_name: hc-raft-node-1
+    environment:
+      NODE_ID: "1"
+      PEERS: *peers
+      DATA_DIR: /data
+      PORT: "8080"
+      RAFT_PORT: "7000"
+    volumes:
+      - raft-data-1:/data
+    ports:
+      - "8081:8080"
+    networks:
+      - raft-net
+    restart: unless-stopped
+
+  node-2:
+    build:
+      context: .
+      target: node
+    container_name: hc-raft-node-2
+    environment:
+      NODE_ID: "2"
+      PEERS: *peers
+      DATA_DIR: /data
+      PORT: "8080"
+      RAFT_PORT: "7000"
+    volumes:
+      - raft-data-2:/data
+    ports:
+      - "8082:8080"
+    networks:
+      - raft-net
+    restart: unless-stopped
+
+  node-3:
+    build:
+      context: .
+      target: node
+    container_name: hc-raft-node-3
+    environment:
+      NODE_ID: "3"
+      PEERS: *peers
+      DATA_DIR: /data
+      PORT: "8080"
+      RAFT_PORT: "7000"
+    volumes:
+      - raft-data-3:/data
+    ports:
+      - "8083:8080"
+    networks:
+      - raft-net
+    restart: unless-stopped
+
+  node-4:
+    build:
+      context: .
+      target: node
+    container_name: hc-raft-node-4
+    environment:
+      NODE_ID: "4"
+      PEERS: *peers
+      DATA_DIR: /data
+      PORT: "8080"
+      RAFT_PORT: "7000"
+    volumes:
+      - raft-data-4:/data
+    ports:
+      - "8084:8080"
+    networks:
+      - raft-net
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      target: controller
+    container_name: hc-raft-dashboard
+    environment:
+      NODES: *peers
+      DATA_DIR: /data
+      PORT: "9090"
+    volumes:
+      - raft-dashboard-data:/data
+    ports:
+      - "9090:9090"
+    networks:
+      - raft-net
+    depends_on:
+      - node-0
+      - node-1
+      - node-2
+      - node-3
+      - node-4
+
+volumes:
+  raft-data-0:
+    driver: local
+  raft-data-1:
+    driver: local
+  raft-data-2:
+    driver: local
+  raft-data-3:
+    driver: local
+  raft-data-4:
+    driver: local
+  raft-dashboard-data:
+    driver: local
+
+networks:
+  raft-net:
+    driver: bridge
